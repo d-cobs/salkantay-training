@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Salkantay Training">
+    <meta name="theme-color" content="#ea580c">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%23ea580c' rx='40'/%3E%3Ctext x='90' y='125' font-size='100' text-anchor='middle'%3E🏔️%3C/text%3E%3C/svg%3E">
+    <title>Salkantay Training - Danielle & Anne Marie 🏔️</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['"Poppins"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow-x: hidden;
+        }
+        h1, h2, h3 {
+            font-family: 'Poppins', sans-serif;
+        }
+        * {
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyAilKEUiaFjoJuQFzsk3ohWxA-rP4AHoEQ",
+            authDomain: "salkantay-training.firebaseapp.com",
+            projectId: "salkantay-training",
+            storageBucket: "salkantay-training.firebasestorage.app",
+            messagingSenderId: "882626007906",
+            appId: "1:882626007906:web:b27f0e566852fe1276523b"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function Countdown() {
+            const today = new Date();
+            const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const hikeDate = new Date(2026, 4, 19);
+            
+            const oneDay = 24 * 60 * 60 * 1000;
+            const daysUntil = Math.round((hikeDate - todayDate) / oneDay);
+            
+            if (daysUntil <= 0) {
+                return (
+                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-3 rounded-full inline-block font-bold text-sm shadow-lg">
+                        🎉 You hiked Salkantay! 🎉
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white px-6 py-3 rounded-full inline-block font-bold text-sm shadow-lg">
+                    {daysUntil} day{daysUntil !== 1 ? 's' : ''} until Salkantay! 🏔️
+                </div>
+            );
+        }
+
+        function App() {
+            const [currentUser, setCurrentUser] = useState(() => {
+                return localStorage.getItem('salkantay-user') || 'Danielle';
+            });
+            const [activeTab, setActiveTab] = useState('feed');
+            const [workouts, setWorkouts] = useState([]);
+            const [newWorkout, setNewWorkout] = useState({
+                hours: 0,
+                minutes: 0,
+                type: 'Strength'
+            });
+            const [notification, setNotification] = useState(null);
+            const [lastSeenWorkoutId, setLastSeenWorkoutId] = useState(null);
+            const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+            const [hasNewActivity, setHasNewActivity] = useState(false);
+            const [loading, setLoading] = useState(true);
+
+            // Save current user
+            useEffect(() => {
+                localStorage.setItem('salkantay-user', currentUser);
+            }, [currentUser]);
+
+            // Load workouts from Firestore with real-time updates
+            useEffect(() => {
+                const unsubscribe = db.collection('workouts')
+                    .orderBy('timestamp', 'desc')
+                    .onSnapshot((snapshot) => {
+                        const workoutData = snapshot.docs.map(doc => ({
+                            firestoreId: doc.id,
+                            ...doc.data()
+                        }));
+                        setWorkouts(workoutData);
+                        setLoading(false);
+                    }, (error) => {
+                        console.error('Error loading workouts:', error);
+                        setLoading(false);
+                    });
+
+                const lastSeen = localStorage.getItem('lastSeenWorkoutId-' + currentUser);
+                if (lastSeen) {
+                    setLastSeenWorkoutId(parseInt(lastSeen));
+                }
+
+                return () => unsubscribe();
+            }, []);
+
+            // Notification permission
+            useEffect(() => {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    setNotificationsEnabled(true);
+                }
+            }, []);
+
+            function requestNotificationPermission() {
+                if (!('Notification' in window)) {
+                    alert('Your browser does not support notifications');
+                    return;
+                }
+                
+                if (Notification.permission === 'denied') {
+                    alert('Notifications are blocked. Please enable them in your browser settings.');
+                    return;
+                }
+                
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        setNotificationsEnabled(true);
+                        new Notification('🏔️ Notifications Enabled!', {
+                            body: "You'll now get updates when your buddy logs workouts!"
+                        });
+                    }
+                });
+            }
+
+            // Check for new activity
+            useEffect(() => {
+                if (workouts.length > 0 && lastSeenWorkoutId) {
+                    const otherUser = currentUser === 'Danielle' ? 'Anne Marie' : 'Danielle';
+                    const newWorkoutsFromOther = workouts.filter(w => 
+                        w.user === otherUser && w.id > lastSeenWorkoutId
+                    );
+                    
+                    const hasActivity = newWorkoutsFromOther.length > 0;
+                    setHasNewActivity(hasActivity);
+                    
+                    if (newWorkoutsFromOther.length > 0) {
+                        setNotification({
+                            user: otherUser,
+                            count: newWorkoutsFromOther.length
+                        });
+                        
+                        if (notificationsEnabled) {
+                            new Notification('🏔️ New Activity!', {
+                                body: `${otherUser} logged ${newWorkoutsFromOther.length} new workout${newWorkoutsFromOther.length > 1 ? 's' : ''}! 🎉`
+                            });
+                        }
+                    }
+                }
+            }, [workouts, currentUser, notificationsEnabled, lastSeenWorkoutId]);
+
+            // Mark as seen when viewing feed
+            useEffect(() => {
+                if (activeTab === 'feed' && workouts.length > 0) {
+                    const latestWorkoutId = workouts[0].id;
+                    setLastSeenWorkoutId(latestWorkoutId);
+                    localStorage.setItem('lastSeenWorkoutId-' + currentUser, latestWorkoutId.toString());
+                    setNotification(null);
+                    setHasNewActivity(false);
+                }
+            }, [activeTab, workouts, currentUser]);
+
+            async function addWorkout(e) {
+                e.preventDefault();
+                
+                const totalMinutes = (newWorkout.hours * 60) + newWorkout.minutes;
+                
+                if (totalMinutes === 0) {
+                    alert('Please select a duration!');
+                    return;
+                }
+
+                const workout = {
+                    id: Date.now(),
+                    user: currentUser,
+                    time: totalMinutes,
+                    type: newWorkout.type,
+                    date: new Date().toISOString(),
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    reactions: {},
+                    comments: []
+                };
+
+                try {
+                    await db.collection('workouts').add(workout);
+                    setNewWorkout({ hours: 0, minutes: 0, type: 'Strength' });
+                    setActiveTab('feed');
+                } catch (error) {
+                    console.error('Error adding workout:', error);
+                    alert('Error saving workout. Please try again.');
+                }
+            }
+
+            async function toggleReaction(firestoreId, emoji) {
+                const workout = workouts.find(w => w.firestoreId === firestoreId);
+                if (!workout) return;
+
+                const reactions = { ...workout.reactions };
+                
+                if (!reactions[emoji]) {
+                    reactions[emoji] = [];
+                }
+                
+                const userIndex = reactions[emoji].indexOf(currentUser);
+                
+                if (userIndex > -1) {
+                    reactions[emoji].splice(userIndex, 1);
+                    if (reactions[emoji].length === 0) {
+                        delete reactions[emoji];
+                    }
+                } else {
+                    reactions[emoji].push(currentUser);
+                }
+
+                try {
+                    await db.collection('workouts').doc(firestoreId).update({ reactions });
+                } catch (error) {
+                    console.error('Error updating reaction:', error);
+                }
+            }
+
+            async function addComment(firestoreId, text) {
+                if (!text.trim()) return;
+                
+                const workout = workouts.find(w => w.firestoreId === firestoreId);
+                if (!workout) return;
+
+                const comment = {
+                    id: Date.now(),
+                    user: currentUser,
+                    text: text.trim(),
+                    date: new Date().toISOString()
+                };
+
+                try {
+                    await db.collection('workouts').doc(firestoreId).update({
+                        comments: firebase.firestore.FieldValue.arrayUnion(comment)
+                    });
+                } catch (error) {
+                    console.error('Error adding comment:', error);
+                }
+            }
+
+            async function deleteWorkout(firestoreId) {
+                if (confirm('Delete this workout?')) {
+                    try {
+                        await db.collection('workouts').doc(firestoreId).delete();
+                    } catch (error) {
+                        console.error('Error deleting workout:', error);
+                        alert('Error deleting workout. Please try again.');
+                    }
+                }
+            }
+
+            const stats = {
+                totalMinutes: workouts.reduce((sum, w) => sum + w.time, 0),
+                totalWorkouts: workouts.length,
+                danielleWorkouts: workouts.filter(w => w.user === 'Danielle').length,
+                annemarieWorkouts: workouts.filter(w => w.user === 'Anne Marie').length,
+                danielleMinutes: workouts.filter(w => w.user === 'Danielle').reduce((sum, w) => sum + w.time, 0),
+                annemarieMinutes: workouts.filter(w => w.user === 'Anne Marie').reduce((sum, w) => sum + w.time, 0)
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 p-4 flex items-center justify-center">
+                        <div className="text-orange-900 text-xl font-semibold">Loading...</div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-red-50 p-4 sm:p-5">
+                    <div className="max-w-2xl mx-auto w-full">
+                        <div className="text-center text-orange-900 mb-8">
+                            <h1 className="text-3xl font-bold mb-2">🏔️ Salkantay Training</h1>
+                            <p className="text-orange-700 mb-3">Danielle & Anne Marie</p>
+                            <Countdown />
+                        </div>
+
+                        {notification && (
+                            <div className="bg-emerald-600 text-white p-4 rounded-xl mb-5 shadow-lg animate-bounce">
+                                <div className="text-center font-semibold">
+                                    🎉 {notification.user} logged {notification.count} new workout{notification.count > 1 ? 's' : ''}!
+                                </div>
+                            </div>
+                        )}
+
+                        {!notificationsEnabled && 'Notification' in window && (
+                            <div className="bg-orange-100 border-2 border-orange-300 text-orange-900 p-3 rounded-xl mb-5 text-sm text-center">
+                                <div className="font-semibold mb-1">🔔 Enable notifications?</div>
+                                <div className="text-xs mb-2">Get notified when your buddy logs a workout!</div>
+                                <button 
+                                    onClick={requestNotificationPermission}
+                                    className="bg-orange-600 text-white px-4 py-2 rounded-lg text-xs font-semibold hover:bg-orange-700 active:bg-orange-800"
+                                >
+                                    Enable Notifications
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2 sm:gap-3 mb-5">
+                            <button 
+                                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
+                                    currentUser === 'Danielle' 
+                                        ? 'bg-orange-600 text-white shadow-lg' 
+                                        : 'bg-stone-100 text-orange-800 border-2 border-stone-200'
+                                }`}
+                                onClick={() => setCurrentUser('Danielle')}
+                            >
+                                Danielle
+                            </button>
+                            <button 
+                                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
+                                    currentUser === 'Anne Marie' 
+                                        ? 'bg-orange-600 text-white shadow-lg' 
+                                        : 'bg-stone-100 text-orange-800 border-2 border-stone-200'
+                                }`}
+                                onClick={() => setCurrentUser('Anne Marie')}
+                            >
+                                Anne Marie
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
+                            <div className="bg-gradient-to-br from-amber-600 to-red-600 text-white p-6 rounded-2xl text-center shadow-lg">
+                                <div className="text-4xl font-bold mb-1">{stats.totalMinutes}</div>
+                                <div className="text-sm opacity-90">Total Minutes</div>
+                            </div>
+                            <div className="bg-gradient-to-br from-amber-600 to-red-600 text-white p-6 rounded-2xl text-center shadow-lg">
+                                <div className="text-4xl font-bold mb-1">{stats.totalWorkouts}</div>
+                                <div className="text-sm opacity-90">Total Workouts</div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
+                            <div className="bg-stone-100 border-2 border-stone-200 text-orange-900 p-4 rounded-xl text-center">
+                                <div className="text-lg font-bold mb-1">{stats.danielleWorkouts}</div>
+                                <div className="text-xs text-orange-700 mb-2">Danielle's Workouts</div>
+                                <div className="text-sm font-semibold">{stats.danielleMinutes} min</div>
+                            </div>
+                            <div className="bg-stone-100 border-2 border-stone-200 text-orange-900 p-4 rounded-xl text-center">
+                                <div className="text-lg font-bold mb-1">{stats.annemarieWorkouts}</div>
+                                <div className="text-xs text-orange-700 mb-2">Anne Marie's Workouts</div>
+                                <div className="text-sm font-semibold">{stats.annemarieMinutes} min</div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-2 sm:gap-3 mb-6">
+                            <button 
+                                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all relative ${
+                                    activeTab === 'feed' 
+                                        ? 'bg-orange-600 text-white shadow-lg' 
+                                        : 'bg-stone-100 text-orange-800 border-2 border-stone-200'
+                                }`}
+                                onClick={() => setActiveTab('feed')}
+                            >
+                                🏃 Feed
+                                {hasNewActivity && activeTab !== 'feed' && (
+                                    <span className="absolute top-1 right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white"></span>
+                                )}
+                            </button>
+                            <button 
+                                className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
+                                    activeTab === 'add' 
+                                        ? 'bg-orange-600 text-white shadow-lg' 
+                                        : 'bg-stone-100 text-orange-800 border-2 border-stone-200'
+                                }`}
+                                onClick={() => setActiveTab('add')}
+                            >
+                                ➕ Log Workout
+                            </button>
+                        </div>
+
+                        {activeTab === 'add' && (
+                            <LogWorkoutForm 
+                                newWorkout={newWorkout}
+                                setNewWorkout={setNewWorkout}
+                                onSubmit={addWorkout}
+                            />
+                        )}
+
+                        {activeTab === 'feed' && (
+                            <WorkoutFeed
+                                workouts={workouts}
+                                onReaction={toggleReaction}
+                                onComment={addComment}
+                                onDelete={deleteWorkout}
+                                currentUser={currentUser}
+                            />
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function LogWorkoutForm({ newWorkout, setNewWorkout, onSubmit }) {
+            return (
+                <div className="bg-white rounded-2xl p-6 shadow-xl">
+                    <h2 className="text-xl font-bold mb-6">Log a Workout</h2>
+                    <form onSubmit={onSubmit}>
+                        <div className="mb-4">
+                            <label className="block text-sm font-semibold mb-3 text-gray-700">
+                                Workout Type
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {['Incline Walk', 'Long Hike', 'Strength', 'Reformer', 'Yoga', 'Downhill Prep'].map(type => (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        className={`py-3 px-4 rounded-lg font-semibold transition-all text-sm ${
+                                            newWorkout.type === type
+                                                ? 'bg-orange-600 text-white shadow-md'
+                                                : 'bg-stone-100 text-orange-800 border-2 border-stone-200'
+                                        }`}
+                                        onClick={() => setNewWorkout({...newWorkout, type: type})}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-semibold mb-3 text-gray-700">
+                                Hours
+                            </label>
+                            <div className="grid grid-cols-4 gap-2">
+                                {[0, 1, 2, 3].map(hrs => (
+                                    <button
+                                        key={hrs}
+                                        type="button"
+                                        className={`py-3 px-3 rounded-lg font-bold text-base transition-all ${
+                                            newWorkout.hours === hrs
+                                                ? 'bg-orange-600 text-white shadow-md'
+                                                : 'bg-stone-100 text-gray-700 border-2 border-stone-200'
+                                        }`}
+                                        onClick={() => setNewWorkout({...newWorkout, hours: hrs})}
+                                    >
+                                        {hrs}h
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold mb-3 text-gray-700">
+                                Minutes
+                            </label>
+                            <div className="grid grid-cols-6 gap-2 mb-2">
+                                {[0, 10, 15, 20, 25, 30].map(mins => (
+                                    <button
+                                        key={mins}
+                                        type="button"
+                                        className={`py-2 px-2 rounded-lg font-bold text-sm transition-all ${
+                                            newWorkout.minutes === mins
+                                                ? 'bg-orange-600 text-white shadow-md'
+                                                : 'bg-stone-100 text-gray-700 border-2 border-stone-200'
+                                        }`}
+                                        onClick={() => setNewWorkout({...newWorkout, minutes: mins})}
+                                    >
+                                        {mins}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-5 gap-2">
+                                {[35, 40, 45, 50, 55].map(mins => (
+                                    <button
+                                        key={mins}
+                                        type="button"
+                                        className={`py-2 px-2 rounded-lg font-bold text-sm transition-all ${
+                                            newWorkout.minutes === mins
+                                                ? 'bg-orange-600 text-white shadow-md'
+                                                : 'bg-stone-100 text-gray-700 border-2 border-stone-200'
+                                        }`}
+                                        onClick={() => setNewWorkout({...newWorkout, minutes: mins})}
+                                    >
+                                        {mins}
+                                    </button>
+                                ))}
+                            </div>
+                            {(newWorkout.hours > 0 || newWorkout.minutes > 0) && (
+                                <div className="mt-3 text-center text-orange-700 font-semibold">
+                                    Total: {newWorkout.hours > 0 && `${newWorkout.hours}h `}{newWorkout.minutes > 0 && `${newWorkout.minutes}min`}
+                                </div>
+                            )}
+                        </div>
+
+                        <button 
+                            type="submit" 
+                            className="w-full bg-gradient-to-r from-orange-600 to-red-700 text-white py-4 rounded-lg font-semibold text-base shadow-lg hover:shadow-xl transition-all"
+                        >
+                            🎉 Log Workout
+                        </button>
+                    </form>
+                </div>
+            );
+        }
+
+        function WorkoutFeed({ workouts, onReaction, onComment, onDelete, currentUser }) {
+            if (workouts.length === 0) {
+                return (
+                    <div className="bg-white rounded-2xl p-6 shadow-xl">
+                        <h2 className="text-xl font-bold mb-6">Your Training Feed</h2>
+                        <div className="text-center py-12 text-gray-400">
+                            <div className="text-6xl mb-3">🏔️</div>
+                            <p className="font-medium">No workouts yet!</p>
+                            <p className="text-sm mt-2">Start logging to track your progress</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="bg-white rounded-2xl p-6 shadow-xl">
+                    <h2 className="text-xl font-bold mb-6">Your Training Feed</h2>
+                    {workouts.map(workout => (
+                        <WorkoutItem 
+                            key={workout.firestoreId}
+                            workout={workout}
+                            onReaction={onReaction}
+                            onComment={onComment}
+                            onDelete={onDelete}
+                            currentUser={currentUser}
+                        />
+                    ))}
+                </div>
+            );
+        }
+
+        function WorkoutItem({ workout, onReaction, onComment, onDelete, currentUser }) {
+            const [commentText, setCommentText] = useState('');
+
+            function handleCommentSubmit(e) {
+                e.preventDefault();
+                onComment(workout.firestoreId, commentText);
+                setCommentText('');
+            }
+
+            const date = new Date(workout.date);
+            const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+            return (
+                <div className="border-2 border-stone-200 rounded-xl p-4 mb-4 bg-stone-50">
+                    <div className="flex justify-between items-start mb-3">
+                        <div>
+                            <div className="font-bold text-orange-700 text-base">{workout.user}</div>
+                            <div className="text-xs text-gray-500">{dateStr} at {timeStr}</div>
+                        </div>
+                        <button 
+                            onClick={() => onDelete(workout.firestoreId)}
+                            className="text-red-500 hover:text-red-700 text-xl"
+                            title="Delete workout"
+                        >
+                            🗑️
+                        </button>
+                    </div>
+
+                    <div className="flex gap-5 mb-3 flex-wrap">
+                        <div className="flex items-center gap-1 text-sm">
+                            <span>⏱️</span>
+                            <span className="font-semibold">{workout.time} min</span>
+                        </div>
+                    </div>
+
+                    <span className="inline-block bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-xs font-semibold">
+                        {workout.type}
+                    </span>
+
+                    <div className="flex gap-2 mt-3 flex-wrap">
+                        {['🔥', '💪', '🎉', '⭐', '👏'].map(emoji => {
+                            const reactionList = workout.reactions && workout.reactions[emoji] ? workout.reactions[emoji] : [];
+                            const hasReactions = reactionList.length > 0;
+                            const userReacted = reactionList.includes(currentUser);
+                            
+                            const showButton = hasReactions || (workout.reactions && Object.keys(workout.reactions).length === 0);
+                            
+                            if (!showButton) return null;
+                            
+                            return (
+                                <button
+                                    key={emoji}
+                                    className={`px-3 py-1.5 rounded-full text-base border-2 transition-all ${
+                                        userReacted
+                                            ? 'bg-amber-100 border-amber-500' 
+                                            : hasReactions
+                                            ? 'bg-stone-100 border-stone-300'
+                                            : 'bg-white border-gray-200 opacity-60 hover:opacity-100'
+                                    }`}
+                                    onClick={() => onReaction(workout.firestoreId, emoji)}
+                                >
+                                    {emoji}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {workout.comments && workout.comments.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                            {workout.comments.map(comment => (
+                                <div key={comment.id} className="bg-white p-3 rounded-lg text-sm">
+                                    <span className="font-semibold text-orange-700">{comment.user}:</span> {comment.text}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <form className="flex gap-2 mt-3 items-center" onSubmit={handleCommentSubmit}>
+                        <input
+                            type="text"
+                            className="flex-1 min-w-0 px-3 sm:px-4 py-3 border-2 border-gray-200 rounded-full text-sm sm:text-base focus:border-orange-600 focus:outline-none"
+                            placeholder="Add encouragement..."
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                        />
+                        <button 
+                            type="submit" 
+                            className="bg-orange-600 text-white px-5 sm:px-6 py-3 rounded-full font-semibold hover:bg-orange-700 transition-colors flex-shrink-0 text-lg"
+                        >
+                            ➤
+                        </button>
+                    </form>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
